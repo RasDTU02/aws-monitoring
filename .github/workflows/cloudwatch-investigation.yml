@@ -130,34 +130,35 @@ jobs:
           report = json.loads(result["body"].read())["content"][0]["text"]
 
           error_rate = round((metrics["5xx_errors"] / metrics["total_requests"] * 100), 1) if metrics["total_requests"] > 0 else 0
-          status = "✅ HEALTHY" if metrics["5xx_errors"] == 0 and metrics["p95_ms"] < 5000 else "⚠️ ISSUES DETECTED"
+          status = "HEALTHY" if metrics["5xx_errors"] == 0 and metrics["p95_ms"] < 5000 else "ISSUES DETECTED"
 
-          email_body = f"""CloudWatch Investigation Report
-          ================================
-          Period: {metrics['period']}
-          Status: {status}
-
-          METRICS
-          -------
-          Total requests : {metrics['total_requests']}
-          4XX errors     : {metrics['4xx_errors']}
-          5XX errors     : {metrics['5xx_errors']} ({error_rate}% error rate)
-          Avg latency    : {metrics['avg_latency_ms']}ms
-          p50            : {metrics['p50_ms']}ms
-          p95            : {metrics['p95_ms']}ms
-          p99            : {metrics['p99_ms']}ms
-
-          AI ANALYSIS
-          -----------
-          {report}
-
-          RECENT ERROR LOGS
-          -----------------
-          {chr(10).join(error_logs) if error_logs else "No errors in the last 24 hours"}
-
-          ---
-          Full logs: https://github.com/RasDTU02/aws-monitoring/actions
-          """
+          lines = [
+              "CloudWatch Investigation Report",
+              "================================",
+              f"Period : {metrics['period']}",
+              f"Status : {status}",
+              "",
+              "METRICS",
+              "-------",
+              f"Total requests : {metrics['total_requests']}",
+              f"4XX errors     : {metrics['4xx_errors']}",
+              f"5XX errors     : {metrics['5xx_errors']} ({error_rate}% error rate)",
+              f"Avg latency    : {metrics['avg_latency_ms']}ms",
+              f"p50            : {metrics['p50_ms']}ms",
+              f"p95            : {metrics['p95_ms']}ms",
+              f"p99            : {metrics['p99_ms']}ms",
+              "",
+              "AI ANALYSIS",
+              "-----------",
+              report,
+              "",
+              "RECENT ERROR LOGS",
+              "-----------------",
+              "\n".join(error_logs) if error_logs else "No errors in the last 24 hours",
+              "",
+              "Full logs: https://github.com/RasDTU02/aws-monitoring/actions",
+          ]
+          email_body = "\n".join(lines)
 
           print(email_body)
           with open('/tmp/cw_report.txt', 'w') as f:
