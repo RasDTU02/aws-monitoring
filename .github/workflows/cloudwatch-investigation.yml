@@ -1,0 +1,185 @@
+name: CloudWatch Investigation (AI Agent)
+
+on:
+  schedule:
+    - cron: '15 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: eu-north-1
+
+      - name: Install dependencies
+        run: pip install boto3 -q
+
+      - name: Fetch CloudWatch data and run AI investigation
+        run: |
+          python3 - <<'EOF'
+          import boto3, json
+          from datetime import datetime, timedelta, timezone
+
+          cloudwatch = boto3.client("cloudwatch", region_name="eu-north-1")
+          logs = boto3.client("logs", region_name="eu-north-1")
+          bedrock = boto3.client("bedrock-runtime", region_name="eu-north-1")
+
+          now = datetime.now(timezone.utc)
+          since = now - timedelta(hours=24)
+
+          def get_metric(metric_name, stat, extended=False):
+              kwargs = dict(
+                  Namespace="AWS/ApiGateway",
+                  MetricName=metric_name,
+                  Dimensions=[{"Name": "ApiName", "Value": "bedrock-api"}],
+                  StartTime=since,
+                  EndTime=now,
+                  Period=86400,
+              )
+              if extended:
+                  kwargs["ExtendedStatistics"] = [stat]
+              else:
+                  kwargs["Statistics"] = [stat]
+              r = cloudwatch.get_metric_statistics(**kwargs)
+              dp = r["Datapoints"]
+              if not dp:
+                  return None
+              return dp[0].get(stat if not extended else "ExtendedStatistics", {})
+
+          total_requests = get_metric("Count", "Sum") or 0
+          errors_4xx = get_metric("4XXError", "Sum") or 0
+          errors_5xx = get_metric("5XXError", "Sum") or 0
+          avg_latency = get_metric("Latency", "Average") or 0
+          latency_p = get_metric("Latency", "p50", extended=True) or {}
+
+          metrics = {
+              "period": "Last 24 hours",
+              "total_requests": int(total_requests) if total_requests else 0,
+              "4xx_errors": int(errors_4xx) if errors_4xx else 0,
+              "5xx_errors": int(errors_5xx) if errors_5xx else 0,
+              "avg_latency_ms": round(avg_latency, 1) if avg_latency else 0,
+              "p50_ms": round(latency_p.get("p50", 0), 1),
+          }
+
+          # Fetch p95 and p99 separately
+          p_ext = get_metric("Latency", "p95", extended=True) or {}
+          metrics["p95_ms"] = round(p_ext.get("p95", 0), 1)
+          p_ext2 = get_metric("Latency", "p99", extended=True) or {}
+          metrics["p99_ms"] = round(p_ext2.get("p99", 0), 1)
+
+          # Fetch recent error logs from Lambda
+          error_logs = []
+          try:
+              log_group = "/aws/lambda/bedrock-chat-api"
+              since_ms = int(since.timestamp() * 1000)
+              now_ms = int(now.timestamp() * 1000)
+
+              response = logs.filter_log_events(
+                  logGroupName=log_group,
+                  startTime=since_ms,
+                  endTime=now_ms,
+                  filterPattern="ERROR",
+                  limit=10
+              )
+              error_logs = [e["message"].strip() for e in response.get("events", [])]
+          except Exception as e:
+              error_logs = [f"Could not fetch logs: {e}"]
+
+          # Feed everything to the AI agent for analysis
+          payload = {
+              "anthropic_version": "bedrock-2023-05-31",
+              "max_tokens": 768,
+              "messages": [{
+                  "role": "user",
+                  "content": f"""You are an AI monitoring agent investigating a Bedrock Chat API on AWS.
+          Analyze the following CloudWatch data from the last 24 hours and write a clear investigation report.
+          Cover:
+          - Overall traffic and error rate
+          - Latency health (flag if p95 or p99 > 5000ms)
+          - Any errors found in logs and what they mean
+          - Your assessment: is anything worth worrying about?
+
+          Be direct and concise. 4-8 lines max.
+
+          Metrics:
+          {json.dumps(metrics, indent=2)}
+
+          Recent error log entries (last 24h):
+          {chr(10).join(error_logs) if error_logs else "None"}
+          """
+              }]
+          }
+
+          result = bedrock.invoke_model(
+              modelId="eu.anthropic.claude-sonnet-4-6",
+              body=json.dumps(payload),
+              contentType="application/json",
+              accept="application/json"
+          )
+          report = json.loads(result["body"].read())["content"][0]["text"]
+
+          error_rate = round((metrics["5xx_errors"] / metrics["total_requests"] * 100), 1) if metrics["total_requests"] > 0 else 0
+          status = "✅ HEALTHY" if metrics["5xx_errors"] == 0 and metrics["p95_ms"] < 5000 else "⚠️ ISSUES DETECTED"
+
+          email_body = f"""CloudWatch Investigation Report
+          ================================
+          Period: {metrics['period']}
+          Status: {status}
+
+          METRICS
+          -------
+          Total requests : {metrics['total_requests']}
+          4XX errors     : {metrics['4xx_errors']}
+          5XX errors     : {metrics['5xx_errors']} ({error_rate}% error rate)
+          Avg latency    : {metrics['avg_latency_ms']}ms
+          p50            : {metrics['p50_ms']}ms
+          p95            : {metrics['p95_ms']}ms
+          p99            : {metrics['p99_ms']}ms
+
+          AI ANALYSIS
+          -----------
+          {report}
+
+          RECENT ERROR LOGS
+          -----------------
+          {chr(10).join(error_logs) if error_logs else "No errors in the last 24 hours"}
+
+          ---
+          Full logs: https://github.com/RasDTU02/aws-monitoring/actions
+          """
+
+          print(email_body)
+          with open('/tmp/cw_report.txt', 'w') as f:
+              f.write(email_body)
+          with open('/tmp/cw_status.txt', 'w') as f:
+              f.write(status)
+          EOF
+
+      - name: Send report via SNS
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import boto3
+
+          report = open('/tmp/cw_report.txt').read()
+          status = open('/tmp/cw_status.txt').read().strip()
+          subject = f"[Bedrock API] {status} — CloudWatch Investigation"
+
+          sns = boto3.client("sns", region_name="eu-north-1")
+          sns.publish(
+              TopicArn="${{ secrets.SNS_TOPIC_ARN }}",
+              Subject=subject,
+              Message=report
+          )
+          print("Report sent")
+          EOF
