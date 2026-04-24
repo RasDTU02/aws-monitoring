@@ -2,7 +2,7 @@ name: Scheduled Health Check (AI Agent)
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 8 * * *'
   workflow_dispatch:
 
 permissions:
@@ -89,21 +89,27 @@ jobs:
               f.write(f"Status: {status}\nAvg latency: {avg_latency}ms\n\n{report}")
 
           if not all_ok or avg_latency > 5000:
-              exit(1)
+              with open('/tmp/health_status', 'w') as f:
+                  f.write('failed')
+              exit(0)
+          else:
+              with open('/tmp/health_status', 'w') as f:
+                  f.write('ok')
           EOF
 
-      - name: Send SNS alert on failure
-        if: failure()
+      - name: Send SNS report
+        if: always()
         run: |
           python3 - <<'EOF'
           import boto3
 
           report = open('/tmp/health_report.txt').read()
+          status = open('/tmp/health_status').read().strip()
+          subject = "⚠️ [Bedrock API] Health Check Failed" if status == 'failed' else "✅ [Bedrock API] Daily Health Check"
           sns = boto3.client("sns", region_name="eu-north-1")
           sns.publish(
               TopicArn="${{ secrets.SNS_TOPIC_ARN }}",
-              Subject="⚠️ [Bedrock API] Health Check Failed",
-              Message=f"Scheduled health check detected issues:\n\n{report}\n\nCheck: https://github.com/RasDTU02/aws-monitoring/actions"
+              Subject=subject,
+              Message=f"{report}\n\nFull logs: https://github.com/RasDTU02/aws-monitoring/actions"
           )
-          print("Alert sent to ranoj@orsted.com")
           EOF
