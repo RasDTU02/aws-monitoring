@@ -110,6 +110,7 @@ jobs:
           - Your assessment: is anything worth worrying about?
 
           Be direct and concise. 4-8 lines max.
+          Write in plain text only — no markdown, no asterisks, no bold, no bullet symbols.
 
           Metrics:
           {json.dumps(metrics, indent=2)}
