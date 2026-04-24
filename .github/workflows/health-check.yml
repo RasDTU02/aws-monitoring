@@ -101,7 +101,7 @@ jobs:
           report = open('/tmp/health_report.txt').read()
           sns = boto3.client("sns", region_name="eu-north-1")
           sns.publish(
-              TopicArn="arn:aws:sns:eu-north-1:348542648420:bedrock-api-notifications",
+              TopicArn="${{ secrets.SNS_TOPIC_ARN }}",
               Subject="⚠️ [Bedrock API] Health Check Failed",
               Message=f"Scheduled health check detected issues:\n\n{report}\n\nCheck: https://github.com/RasDTU02/aws-monitoring/actions"
           )

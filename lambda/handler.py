@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import boto3
 from botocore.exceptions import ClientError
@@ -8,11 +9,12 @@ sns = boto3.client("sns", region_name="eu-north-1")
 
 MODEL_ID = "eu.anthropic.claude-sonnet-4-6"
 MAX_TOKENS = 512
-SNS_TOPIC_ARN = "arn:aws:sns:eu-north-1:348542648420:bedrock-api-notifications"
+SNS_TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN", "")
 
 
 def lambda_handler(event, context):
     start = time.time()
+    message = ""
     try:
         body = json.loads(event.get("body") or "{}")
         message = body.get("message", "").strip()
@@ -45,15 +47,17 @@ def lambda_handler(event, context):
 
     except ClientError as e:
         latency_ms = int((time.time() - start) * 1000)
-        notify(message if 'message' in dir() else "unknown", str(e), latency_ms, 500)
+        notify(message, str(e), latency_ms, 500)
         return response(500, {"error": str(e)})
     except Exception as e:
         latency_ms = int((time.time() - start) * 1000)
-        notify(message if 'message' in dir() else "unknown", str(e), latency_ms, 500)
+        notify(message, str(e), latency_ms, 500)
         return response(500, {"error": f"Unexpected error: {str(e)}"})
 
 
 def notify(message, reply, latency_ms, status_code):
+    if not SNS_TOPIC_ARN:
+        return
     try:
         status = "✅ Success" if status_code == 200 else "❌ Error"
         subject = f"[Bedrock API] {status} — {latency_ms}ms"
