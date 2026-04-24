@@ -102,15 +102,15 @@ jobs:
               "messages": [{
                   "role": "user",
                   "content": f"""You are an AI monitoring agent investigating a Bedrock Chat API on AWS.
-          Analyze the following CloudWatch data from the last 24 hours and write a clear investigation report.
-          Cover:
-          - Overall traffic and error rate
-          - Latency health (flag if p95 or p99 > 5000ms)
-          - Any errors found in logs and what they mean
-          - Your assessment: is anything worth worrying about?
+          Analyze the following CloudWatch data from the last 24 hours.
 
-          Be direct and concise. 4-8 lines max.
-          Write in plain text only — no markdown, no asterisks, no bold, no bullet symbols.
+          Write your report as short separate lines, one observation per line, like this:
+          Total requests: 50, with 6 failures (12% error rate).
+          p95 latency is 5065ms - above the 5000ms threshold.
+          No error logs captured - possible logging gap.
+          Recommendation: check Bedrock throttling limits.
+
+          Max 6 lines. Plain text only. No markdown, no asterisks, no dashes at line start.
 
           Metrics:
           {json.dumps(metrics, indent=2)}
