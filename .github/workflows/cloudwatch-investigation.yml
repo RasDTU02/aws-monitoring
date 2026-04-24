@@ -62,7 +62,9 @@ jobs:
           errors_4xx = get_metric("4XXError", "Sum") or 0
           errors_5xx = get_metric("5XXError", "Sum") or 0
           avg_latency = get_metric("Latency", "Average") or 0
-          latency_p = get_metric("Latency", "p50", extended=True) or {}
+          p50 = get_metric("Latency", "p50", extended=True) or 0
+          p95 = get_metric("Latency", "p95", extended=True) or 0
+          p99 = get_metric("Latency", "p99", extended=True) or 0
 
           metrics = {
               "period": "Last 24 hours",
@@ -70,14 +72,10 @@ jobs:
               "4xx_errors": int(errors_4xx) if errors_4xx else 0,
               "5xx_errors": int(errors_5xx) if errors_5xx else 0,
               "avg_latency_ms": round(avg_latency, 1) if avg_latency else 0,
-              "p50_ms": round(latency_p.get("p50", 0), 1),
+              "p50_ms": round(p50, 1),
+              "p95_ms": round(p95, 1),
+              "p99_ms": round(p99, 1),
           }
-
-          # Fetch p95 and p99 separately
-          p_ext = get_metric("Latency", "p95", extended=True) or {}
-          metrics["p95_ms"] = round(p_ext.get("p95", 0), 1)
-          p_ext2 = get_metric("Latency", "p99", extended=True) or {}
-          metrics["p99_ms"] = round(p_ext2.get("p99", 0), 1)
 
           # Fetch recent error logs from Lambda
           error_logs = []
