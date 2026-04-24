@@ -1,0 +1,109 @@
+name: Scheduled Health Check (AI Agent)
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: eu-north-1
+
+      - name: Install dependencies
+        run: pip install boto3 requests -q
+
+      - name: Run AI health check
+        run: |
+          python3 - <<'EOF'
+          import boto3, requests, json, time
+
+          API_URL = "https://8vsk7ohk3j.execute-api.eu-north-1.amazonaws.com/Prod/chat"
+          TESTS = [
+              "Hello, are you working?",
+              "What is 2 + 2?",
+              "Reply with one word: PONG"
+          ]
+
+          results = []
+          for msg in TESTS:
+              start = time.time()
+              try:
+                  r = requests.post(API_URL, json={"message": msg}, timeout=30)
+                  latency = int((time.time() - start) * 1000)
+                  results.append({
+                      "message": msg,
+                      "status": r.status_code,
+                      "response": r.json().get("response", "")[:100],
+                      "latency_ms": latency,
+                      "ok": r.status_code == 200
+                  })
+              except Exception as e:
+                  results.append({"message": msg, "status": 0, "response": str(e), "latency_ms": 0, "ok": False})
+
+          all_ok = all(r["ok"] for r in results)
+          avg_latency = sum(r["latency_ms"] for r in results) // len(results)
+          summary = json.dumps(results, indent=2)
+
+          bedrock = boto3.client("bedrock-runtime", region_name="eu-north-1")
+          payload = {
+              "anthropic_version": "bedrock-2023-05-31",
+              "max_tokens": 512,
+              "messages": [{
+                  "role": "user",
+                  "content": f"""You are a monitoring agent for a Bedrock Chat API.
+          Analyze these health check results and write a brief status report (3-5 lines).
+          Flag anything concerning. Be direct.
+
+          Results:
+          {summary}
+
+          Average latency: {avg_latency}ms
+          Overall status: {"All passing" if all_ok else "Failures detected"}"""
+              }]
+          }
+          result = bedrock.invoke_model(
+              modelId="eu.anthropic.claude-sonnet-4-6",
+              body=json.dumps(payload),
+              contentType="application/json",
+              accept="application/json"
+          )
+          report = json.loads(result["body"].read())["content"][0]["text"]
+          status = "✅ HEALTHY" if all_ok else "❌ UNHEALTHY"
+
+          print(f"Status: {status} | Avg latency: {avg_latency}ms")
+          print(report)
+
+          with open('/tmp/health_report.txt', 'w') as f:
+              f.write(f"Status: {status}\nAvg latency: {avg_latency}ms\n\n{report}")
+
+          if not all_ok or avg_latency > 5000:
+              exit(1)
+          EOF
+
+      - name: Send SNS alert on failure
+        if: failure()
+        run: |
+          python3 - <<'EOF'
+          import boto3
+
+          report = open('/tmp/health_report.txt').read()
+          sns = boto3.client("sns", region_name="eu-north-1")
+          sns.publish(
+              TopicArn="arn:aws:sns:eu-north-1:348542648420:bedrock-api-notifications",
+              Subject="⚠️ [Bedrock API] Health Check Failed",
+              Message=f"Scheduled health check detected issues:\n\n{report}\n\nCheck: https://github.com/RasDTU02/aws-monitoring/actions"
+          )
+          print("Alert sent to ranoj@orsted.com")
+          EOF

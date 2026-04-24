@@ -7,6 +7,7 @@ on:
 permissions:
   pull-requests: write
   contents: read
+  id-token: write
 
 jobs:
   review:
@@ -17,21 +18,69 @@ jobs:
           fetch-depth: 0
 
       - name: Get PR diff
-        id: diff
-        run: |
-          git diff origin/${{ github.base_ref }}...HEAD > /tmp/pr_diff.txt
-          echo "diff_size=$(wc -c < /tmp/pr_diff.txt)" >> $GITHUB_OUTPUT
+        run: git diff origin/${{ github.base_ref }}...HEAD > /tmp/pr_diff.txt
 
-      - name: Post AI review placeholder comment
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: eu-north-1
+
+      - name: Install dependencies
+        run: pip install boto3 -q
+
+      - name: Run AI agent code review
+        run: |
+          python3 - <<'EOF'
+          import boto3, json
+
+          bedrock = boto3.client("bedrock-runtime", region_name="eu-north-1")
+          diff = open('/tmp/pr_diff.txt').read()
+
+          payload = {
+              "anthropic_version": "bedrock-2023-05-31",
+              "max_tokens": 1024,
+              "messages": [{
+                  "role": "user",
+                  "content": f"""You are a code reviewer for an AWS Lambda + Bedrock Chat API project.
+          Review the following PR diff and provide a concise analysis covering:
+          - 🐛 Bugs or logic errors
+          - 🔒 Security issues
+          - ⚡ Performance concerns
+          - ✅ What looks good
+          - 📝 Suggested improvements (if any)
+
+          Keep it short and actionable. If the change is trivial and correct, say so.
+
+          Diff:
+          {diff}"""
+              }]
+          }
+
+          result = bedrock.invoke_model(
+              modelId="eu.anthropic.claude-sonnet-4-6",
+              body=json.dumps(payload),
+              contentType="application/json",
+              accept="application/json"
+          )
+          reply = json.loads(result["body"].read())["content"][0]["text"]
+
+          with open('/tmp/review.md', 'w') as f:
+              f.write(reply)
+          print(reply)
+          EOF
+
+      - name: Post review comment
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const diff = fs.readFileSync('/tmp/pr_diff.txt', 'utf8').slice(0, 3000);
+            const diff = fs.readFileSync('/tmp/pr_diff.txt', 'utf8').slice(0, 2000);
+            const review = fs.readFileSync('/tmp/review.md', 'utf8');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `## 🤖 AI Agent Review\n\n*On behalf of @RasDTU02 — automated review by the monitoring agent*\n\n**Diff summary:**\n\`\`\`diff\n${diff}\n\`\`\`\n\n> ⏳ Full agent review pending. Run the agent locally to get a complete evaluation including health check against the deployed API.`
+              body: `## 🤖 AI Agent Review\n*On behalf of @RasDTU02 — automated review by the monitoring agent*\n\n${review}\n\n<details><summary>View diff</summary>\n\n\`\`\`diff\n${diff}\n\`\`\`\n</details>`
             });

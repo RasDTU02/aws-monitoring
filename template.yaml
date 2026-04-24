@@ -21,6 +21,10 @@ Resources:
               Action:
                 - bedrock:InvokeModel
               Resource: "*"
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: "arn:aws:sns:eu-north-1:348542648420:bedrock-api-notifications"
       Events:
         ChatPost:
           Type: Api
