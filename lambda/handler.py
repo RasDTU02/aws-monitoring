@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError
 
 bedrock = boto3.client("bedrock-runtime", region_name="eu-north-1")
 
-MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+MODEL_ID = "anthropic.claude-haiku-4-5-20251001-v1:0"
 MAX_TOKENS = 512
 
 
