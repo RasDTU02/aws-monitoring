@@ -65,6 +65,7 @@ jobs:
                   "content": f"""You are a monitoring agent for a Bedrock Chat API.
           Analyze these health check results and write a brief status report (3-5 lines).
           Flag anything concerning. Be direct.
+          Write in plain text only — no markdown, no asterisks, no bold, no bullet symbols.
 
           Results:
           {summary}
