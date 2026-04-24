@@ -54,7 +54,9 @@ jobs:
               dp = r["Datapoints"]
               if not dp:
                   return None
-              return dp[0].get(stat if not extended else "ExtendedStatistics", {})
+              if extended:
+                  return dp[0].get("ExtendedStatistics", {}).get(stat)
+              return dp[0].get(stat)
 
           total_requests = get_metric("Count", "Sum") or 0
           errors_4xx = get_metric("4XXError", "Sum") or 0
