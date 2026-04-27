@@ -115,7 +115,7 @@ def invoke_deepagent_diagnosis(error_count: int, log_lines: str) -> str:
 
     output = result.stdout.strip()
     if not output:
-        output = f"(deepagents stderr: {result.stderr[:500]})" if result.stderr else "(no output)"
+        output = f"(deepagents stderr: {result.stderr})" if result.stderr else "(no output)"
     return output
 
 
