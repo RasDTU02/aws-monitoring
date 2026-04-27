@@ -35,7 +35,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install boto3 requests -q
+        run: pip install boto3 requests deepagents-cli -q
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -46,6 +46,7 @@ jobs:
       - name: Run auto-fix agent
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TOKEN: ${{ secrets.PR_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
           ISSUE_TITLE: ${{ github.event.issue.title || inputs.issue_title }}
           ISSUE_BODY: ${{ github.event.issue.body || inputs.issue_body }}
