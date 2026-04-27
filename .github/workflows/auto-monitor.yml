@@ -31,6 +31,8 @@ jobs:
 
       - name: Configure Deep Agents
         run: |
+          mkdir -p ~/.deepagents/agent/skills
+          echo "# CI Agent" > ~/.deepagents/agent/AGENTS.md
           mkdir -p ~/.deepagents
           cat > ~/.deepagents/config.toml << 'EOF'
           [models]
