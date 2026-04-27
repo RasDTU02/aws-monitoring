@@ -43,6 +43,16 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: eu-north-1
 
+      - name: Configure Deep Agents
+        run: |
+          mkdir -p ~/.deepagents
+          cat > ~/.deepagents/config.toml << 'EOF'
+          [models]
+          recent = "bedrock_converse:eu.anthropic.claude-sonnet-4-6"
+          [warnings]
+          suppress = ["tavily", "ripgrep"]
+          EOF
+
       - name: Run auto-fix agent
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
