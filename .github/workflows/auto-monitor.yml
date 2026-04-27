@@ -21,7 +21,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install boto3 requests deepagents-cli -q
+        run: pip install boto3 requests deepagents-cli "deepagents-cli[bedrock]" -q
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
