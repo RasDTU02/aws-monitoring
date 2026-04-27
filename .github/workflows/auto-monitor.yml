@@ -44,4 +44,10 @@ jobs:
       - name: Run monitor (single poll)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LANGGRAPH_AUTH_TYPE: noop
+          LANGSMITH_LANGGRAPH_API_VARIANT: local_dev
+          LANGGRAPH_DISABLE_FILE_PERSISTENCE: "false"
+          LANGGRAPH_UI_BUNDLER: "true"
+          LANGGRAPH_RUNTIME_EDITION: inmem
+          LANGGRAPH_ALLOW_BLOCKING: "false"
         run: python3 scripts/monitor_and_report.py --once
