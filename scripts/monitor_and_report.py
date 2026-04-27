@@ -106,7 +106,8 @@ def invoke_deepagent_diagnosis(error_count: int, log_lines: str) -> str:
     )
 
     result = subprocess.run(
-        ["deepagents", "-n", prompt, "-S", "all", "-q", "--max-turns", "10"],
+        ["deepagents", "-n", prompt, "-S", "all", "-q", "--max-turns", "10",
+         "--profile-override", '{"model": "eu.anthropic.claude-sonnet-4-6", "model_provider": "bedrock_converse"}'],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,

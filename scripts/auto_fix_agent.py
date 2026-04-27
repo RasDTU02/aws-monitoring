@@ -50,7 +50,8 @@ def invoke_deepagent_fix(issue_number: str, issue_title: str, issue_body: str) -
 
     print("[auto-fix] Running Deep Agents CLI to fix the bug...")
     result = subprocess.run(
-        ["deepagents", "-n", prompt, "-S", "all", "-q", "--max-turns", "15"],
+        ["deepagents", "-n", prompt, "-S", "all", "-q", "--max-turns", "15",
+         "--profile-override", '{"model": "eu.anthropic.claude-sonnet-4-6", "model_provider": "bedrock_converse"}'],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
