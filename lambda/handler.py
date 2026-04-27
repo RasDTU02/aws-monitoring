@@ -38,7 +38,7 @@ def lambda_handler(event, context):
         )
 
         result_body = json.loads(result["body"].read())
-        reply = result_body["content"][0]["text"]
+        reply = result_body["choices"][0]["text"]
         latency_ms = int((time.time() - start) * 1000)
 
         notify(message, reply, latency_ms, 200)
