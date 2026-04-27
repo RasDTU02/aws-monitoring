@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   auto-fix:
-    if: contains(github.event.issue.labels.*.name, 'bug')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.issue.labels.*.name, 'bug')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
